@@ -1,0 +1,160 @@
+version: '3.9'
+
+services:
+  # ─────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: tikane_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tikane_db
+      POSTGRES_USER: tikane_user
+      POSTGRES_PASSWORD: tikane_password
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - tikane_network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tikane_user -d tikane_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # Redis (rate limiting + token blacklist)
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tikane_redis
+    restart: unless-stopped
+    command: redis-server --requirepass tikane_redis_password
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - tikane_network
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # MinIO (S3-compatible storage)
+  # ─────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: tikane_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: tikane_minio_user
+      MINIO_ROOT_PASSWORD: tikane_minio_password
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+    networks:
+      - tikane_network
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─────────────────────────────────────────
+  # Backend API (Node.js + Express)
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: tikane_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://tikane_user:tikane_password@postgres:5432/tikane_db
+      REDIS_URL: redis://:tikane_redis_password@redis:6379
+      AWS_S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: tikane_minio_user
+      AWS_SECRET_ACCESS_KEY: tikane_minio_password
+      AWS_S3_BUCKET: tikane-storage
+      AWS_REGION: us-east-1
+    env_file:
+      - ./backend/.env
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tikane_network
+    command: npm run dev
+
+  # ─────────────────────────────────────────
+  # Frontend (Angular)
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: tikane_frontend
+    restart: unless-stopped
+    ports:
+      - '4200:4200'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - tikane_network
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+  # ─────────────────────────────────────────
+  # PgAdmin (Database GUI - dev only)
+  # ─────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: tikane_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@tikane.ht
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - '5050:80'
+    depends_on:
+      - postgres
+    networks:
+      - tikane_network
+
+# ─────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+# ─────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────
+networks:
+  tikane_network:
+    driver: bridge

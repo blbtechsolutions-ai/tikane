@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Sabotay - Tontine Numérique Haïtienne</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="/">
+  <meta name="description" content="Sabotay - Plateforme de sòl, tontine et sabotay numérique pour Haïti">
+  <meta name="theme-color" content="#6d28d9">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <script src="env.js"></script>
+
+  <style>
+    body { margin: 0; font-family: 'Inter', sans-serif; }
+
+    /* Loading splash screen */
+    #app-loading {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #0f0f23 0%, #1a1a35 100%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; transition: opacity 0.5s ease;
+    }
+    #app-loading .logo {
+      font-family: 'Poppins', sans-serif;
+      font-size: 2.5rem; font-weight: 800;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    #app-loading .subtitle { color: rgba(255,255,255,0.6); font-size: 0.9rem; margin-bottom: 40px; }
+    #app-loading .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(109,40,217,0.3);
+      border-top-color: #6d28d9;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="mat-typography">
+  <div id="app-loading">
+    <div class="logo">🇭🇹 SABOTAY</div>
+    <div class="subtitle">Tontine Numérique Haïtienne</div>
+    <div class="spinner"></div>
+  </div>
+
+  <app-root></app-root>
+
+
+</body>
+</html>

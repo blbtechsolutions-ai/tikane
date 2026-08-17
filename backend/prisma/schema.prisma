@@ -1,0 +1,704 @@
+// =============================================================
+// TIKANE - Prisma Schema
+// Digital Tontine/Sòl/Sabotay Platform for Haiti
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  AGENT
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_VERIFICATION
+}
+
+enum PlanType {
+  PROGRESSIVE   // Jour 1=10, Jour 2=20, etc.
+  FIXED_DAILY   // Ex: 500 HTG/jour
+  WEEKLY        // Ex: 1000 HTG/semaine
+  MONTHLY       // Ex: 5000 HTG/mois
+  SABOTAY       // Avec intérêt
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  CANCELLED
+  DEFAULTED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  MONCASH
+  NATCASH
+  BANK_TRANSFER
+  CASH
+  AGENT_COLLECTION
+  INTERNAL_CREDIT
+}
+
+enum TransactionType {
+  PAYMENT_IN        // Versement client
+  WITHDRAWAL        // Retrait client
+  PENALTY           // Pénalité appliquée
+  COMMISSION        // Commission agent/admin
+  REFUND            // Remboursement
+  ADJUSTMENT        // Ajustement manuel
+  INTEREST          // Intérêt sur sabotay
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum NotificationType {
+  PAYMENT_REMINDER
+  PAYMENT_CONFIRMED
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_REJECTED
+  PLAN_COMPLETED
+  PENALTY_APPLIED
+  ACCOUNT_SUSPENDED
+  WELCOME
+  PASSWORD_RESET
+  KYC_APPROVED
+  KYC_REJECTED
+  CUSTOM
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum PenaltyType {
+  LATE_PAYMENT
+  MISSED_PAYMENT
+  EARLY_WITHDRAWAL
+  BREACH_OF_CONTRACT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VIEW
+  EXPORT
+  APPROVE
+  REJECT
+  SUSPEND
+  ACTIVATE
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TouchStatus {
+  PENDING
+  READY
+  TOUCHED
+}
+
+// ─────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id                String     @id @default(uuid())
+  email             String     @unique
+  phone             String?    @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  role              Role       @default(CLIENT)
+  status            UserStatus @default(PENDING_VERIFICATION)
+  kycStatus         KycStatus  @default(NOT_SUBMITTED)
+  avatarUrl         String?
+  nationalIdNumber  String?    @unique
+  dateOfBirth       DateTime?
+  address           String?
+  city              String?
+  country           String     @default("HT")
+  preferredLanguage String     @default("fr")
+  referralCode      String?    @unique
+  referredById      String?
+
+  emailVerified     Boolean   @default(false)
+  phoneVerified     Boolean   @default(false)
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  loginAttempts     Int       @default(0)
+  lockedUntil       DateTime?
+
+  twoFactorEnabled  Boolean @default(false)
+  twoFactorSecret   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  referredBy         User?          @relation("Referrals", fields: [referredById], references: [id])
+  referrals          User[]         @relation("Referrals")
+  refreshTokens      RefreshToken[]
+  subscriptions      Subscription[]
+  payments           Payment[]
+  transactions       Transaction[]
+  withdrawals        Withdrawal[]
+  notifications      Notification[]
+  penalties          Penalty[]
+  auditLogs          AuditLog[]
+  agentProfile       Agent?
+  kycDocuments       KycDocument[]
+  receivedCommissions Commission[] @relation("CommissionRecipient")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  expiresAt   DateTime
+  isRevoked   Boolean  @default(false)
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("email_verifications")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("password_resets")
+}
+
+model KycDocument {
+  id         String   @id @default(uuid())
+  userId     String
+  docType    String   // NATIONAL_ID, PASSPORT, DRIVER_LICENSE, UTILITY_BILL
+  fileUrl    String
+  status     KycStatus @default(PENDING)
+  reviewedAt DateTime?
+  reviewedBy String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("kyc_documents")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AGENTS
+// ─────────────────────────────────────────────────────────────
+
+model Agent {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  agentCode       String   @unique
+  zone            String?
+  commissionRate  Decimal  @default(2.5) @db.Decimal(5, 2)
+  isActive        Boolean  @default(true)
+  totalCollected  Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id])
+  commissions     Commission[]
+  collections     Payment[]     @relation("AgentPayments")
+
+  @@map("agents")
+}
+
+model Commission {
+  id            String   @id @default(uuid())
+  agentId       String
+  recipientId   String
+  paymentId     String?
+  amount        Decimal  @db.Decimal(15, 2)
+  rate          Decimal  @db.Decimal(5, 2)
+  type          String   @default("COLLECTION")
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  agent         Agent   @relation(fields: [agentId], references: [id])
+  recipient     User    @relation("CommissionRecipient", fields: [recipientId], references: [id])
+  payment       Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([agentId])
+  @@map("commissions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PLANS
+// ─────────────────────────────────────────────────────────────
+
+model Plan {
+  id                  String     @id @default(uuid())
+  name                String
+  nameCreole          String?
+  description         String?
+  descriptionCreole   String?
+  type                PlanType
+  status              PlanStatus @default(DRAFT)
+
+  // Base configuration
+  currency            String     @default("HTG")
+  durationDays        Int
+  startAmount         Decimal    @db.Decimal(15, 2)  // Pour progressif: montant jour 1
+  incrementAmount     Decimal?   @db.Decimal(15, 2)  // Pour progressif: incrément
+  fixedAmount         Decimal?   @db.Decimal(15, 2)  // Pour fixe/hebdo/mensuel
+  interestRate        Decimal?   @db.Decimal(5, 2)   // Pour sabotay (%)
+  interestType        String?    @default("SIMPLE")  // SIMPLE ou COMPOUND
+
+  // Fees
+  registrationFee     Decimal    @default(0) @db.Decimal(15, 2)  // Frais dossier
+  caNeetFee           Decimal    @default(0) @db.Decimal(15, 2)  // Frais canet
+  platformFeeRate     Decimal    @default(0) @db.Decimal(5, 2)   // % plateforme
+  agentCommissionRate Decimal    @default(0) @db.Decimal(5, 2)   // % agent
+
+  // Rules
+  minParticipants     Int?
+  maxParticipants     Int?
+  withdrawalDelayDays Int        @default(0)    // Délai avant retrait
+  gracePeriodDays     Int        @default(3)    // Délai de grâce pour paiement
+  latePenaltyRate     Decimal    @default(5)    @db.Decimal(5, 2) // % pénalité retard
+  maxMissedPayments   Int        @default(3)    // Avant suspension
+
+  // Computed (stored for quick access)
+  totalAmount         Decimal    @db.Decimal(15, 2)  // Montant total à payer
+  finalAmount         Decimal    @db.Decimal(15, 2)  // Montant à recevoir
+
+  isPublic            Boolean    @default(true)
+  isFeatured          Boolean    @default(false)
+  sortOrder           Int        @default(0)
+  imageUrl            String?
+
+  createdBy           String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  deletedAt           DateTime?
+
+  // Relations
+  subscriptions       Subscription[]
+  planSchedules       PlanSchedule[]
+
+  @@map("plans")
+}
+
+model PlanSchedule {
+  id          String   @id @default(uuid())
+  planId      String
+  dayNumber   Int
+  dueDate     DateTime?
+  amount      Decimal  @db.Decimal(15, 2)
+  label       String?
+  createdAt   DateTime @default(now())
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("plan_schedules")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SUBSCRIPTIONS
+// ─────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                  String             @id @default(uuid())
+  subscriptionNumber  String             @unique
+  dossierNumber       String?            @unique
+  userId              String
+  planId              String
+  agentId             String?
+
+  beneficiaryName     String?
+  beneficiaryPhone    String?
+  beneficiarySignature String?
+
+  status              SubscriptionStatus @default(ACTIVE)
+  touchStatus         TouchStatus        @default(PENDING)
+  touchReference      String?
+  touchedAt           DateTime?
+  touchedBy           String?
+  startDate           DateTime
+  endDate             DateTime
+  nextPaymentDate     DateTime?
+  lastPaymentDate     DateTime?
+
+  // Financial tracking
+  totalPaid           Decimal            @default(0) @db.Decimal(15, 2)
+  totalDue            Decimal            @db.Decimal(15, 2)
+  remainingAmount     Decimal            @db.Decimal(15, 2)
+  totalPenalties      Decimal            @default(0) @db.Decimal(15, 2)
+
+  // Fees paid
+  registrationFeePaid Boolean            @default(false)
+  caNeetFeePaid       Boolean            @default(false)
+
+  // Progress
+  currentDay          Int                @default(1)
+  totalDays           Int
+  missedPayments      Int                @default(0)
+  latePayments        Int                @default(0)
+
+  notes               String?
+  withdrawalAllowedAt DateTime?
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  user                User               @relation(fields: [userId], references: [id])
+  plan                Plan               @relation(fields: [planId], references: [id])
+  payments            Payment[]
+  penalties           Penalty[]
+  withdrawals         Withdrawal[]
+
+  @@index([userId])
+  @@index([planId])
+  @@index([touchStatus])
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────────────────────
+
+model Payment {
+  id              String        @id @default(uuid())
+  referenceNumber String        @unique  // TIK-PAY-XXXX
+  subscriptionId  String
+  userId          String
+  agentId         String?
+
+  amount          Decimal       @db.Decimal(15, 2)
+  currency        String        @default("HTG")
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+
+  dayNumber       Int?          // Numéro du jour pour plan progressif
+  scheduledDate   DateTime?
+  paidAt          DateTime?
+
+  externalReference String?     // Référence MonCash/NatCash
+  externalStatus    String?
+  gatewayResponse   Json?
+
+  receiptUrl      String?
+  qrCodeUrl       String?
+  notes           String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  subscription    Subscription  @relation(fields: [subscriptionId], references: [id])
+  user            User          @relation(fields: [userId], references: [id])
+  agent           Agent?        @relation("AgentPayments", fields: [agentId], references: [id])
+  transaction     Transaction?
+  commissions     Commission[]
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([referenceNumber])
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// TRANSACTIONS
+// ─────────────────────────────────────────────────────────────
+
+model Transaction {
+  id              String            @id @default(uuid())
+  transactionRef  String            @unique  // TIK-TXN-XXXX
+  userId          String
+  paymentId       String?           @unique
+  withdrawalId    String?           @unique
+
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  amount          Decimal           @db.Decimal(15, 2)
+  currency        String            @default("HTG")
+  fee             Decimal           @default(0) @db.Decimal(15, 2)
+  netAmount       Decimal           @db.Decimal(15, 2)
+
+  description     String?
+  metadata        Json?
+  balanceBefore   Decimal?          @db.Decimal(15, 2)
+  balanceAfter    Decimal?          @db.Decimal(15, 2)
+
+  processedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  user            User              @relation(fields: [userId], references: [id])
+  payment         Payment?          @relation(fields: [paymentId], references: [id])
+  withdrawal      Withdrawal?       @relation(fields: [withdrawalId], references: [id])
+
+  @@index([userId])
+  @@index([transactionRef])
+  @@map("transactions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// WITHDRAWALS
+// ─────────────────────────────────────────────────────────────
+
+model Withdrawal {
+  id              String           @id @default(uuid())
+  referenceNumber String           @unique  // TIK-WIT-XXXX
+  subscriptionId  String
+  userId          String
+
+  amount          Decimal          @db.Decimal(15, 2)
+  fee             Decimal          @default(0) @db.Decimal(15, 2)
+  netAmount       Decimal          @db.Decimal(15, 2)
+  currency        String           @default("HTG")
+
+  method          PaymentMethod
+  status          WithdrawalStatus @default(PENDING)
+
+  bankName        String?
+  accountNumber   String?
+  accountName     String?
+  phoneNumber     String?
+
+  requestedAt     DateTime         @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  processedAt     DateTime?
+  completedAt     DateTime?
+
+  notes           String?
+  rejectionReason String?
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  subscription    Subscription     @relation(fields: [subscriptionId], references: [id])
+  user            User             @relation(fields: [userId], references: [id])
+  transaction     Transaction?
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@map("withdrawals")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PENALTIES
+// ─────────────────────────────────────────────────────────────
+
+model Penalty {
+  id             String      @id @default(uuid())
+  userId         String
+  subscriptionId String
+  type           PenaltyType
+  amount         Decimal     @db.Decimal(15, 2)
+  reason         String
+  dayNumber      Int?
+  isPaid         Boolean     @default(false)
+  paidAt         DateTime?
+  waivedAt       DateTime?
+  waivedBy       String?
+  createdAt      DateTime    @default(now())
+
+  user         User         @relation(fields: [userId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@map("penalties")
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String              @id @default(uuid())
+  userId     String
+  type       NotificationType
+  channel    NotificationChannel
+  status     NotificationStatus  @default(PENDING)
+
+  subject    String?
+  body       String
+  metadata   Json?
+
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  failedAt    DateTime?
+  failReason  String?
+
+  createdAt  DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("notifications")
+}
+
+model NotificationTemplate {
+  id           String              @id @default(uuid())
+  type         NotificationType
+  channel      NotificationChannel
+  language     String              @default("fr")
+  subject      String?
+  bodyTemplate String
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([type, channel, language])
+  @@map("notification_templates")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDIT LOGS
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  userId      String?
+  action      AuditAction
+  entity      String      // Table/model name
+  entityId    String?
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  description String?
+  createdAt   DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SYSTEM CONFIG
+// ─────────────────────────────────────────────────────────────
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  type      String   @default("string")  // string, number, boolean, json
+  group     String?
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+model Blacklist {
+  id         String   @id @default(uuid())
+  userId     String?
+  email      String?
+  phone      String?
+  ipAddress  String?
+  reason     String
+  expiresAt  DateTime?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  @@map("blacklists")
+}

@@ -1,0 +1,232 @@
+/* ==========================================================
+   TIKANE - Global Styles
+   ========================================================== */
+
+@use '@angular/material' as mat;
+
+/* Tailwind CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap');
+
+/* ─── CSS Variables ────────────────────────────────────────── */
+:root {
+  --tikane-purple: #6d28d9;
+  --tikane-blue: #3b82f6;
+  --tikane-gold: #f59e0b;
+  --tikane-green: #10b981;
+  --tikane-red: #e55353;
+  --tikane-dark: #0f0f23;
+  --tikane-dark-card: #1a1a35;
+  --tikane-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+  --surface-bg: #ffffff;
+  --surface-card: #f8fafc;
+  --surface-border: #e2e8f0;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+}
+
+/* Dark mode variables */
+.dark {
+  --surface-bg: #0f0f23;
+  --surface-card: #1a1a35;
+  --surface-border: #2d2d4e;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+}
+
+/* ─── Base ─────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter', 'Helvetica Neue', sans-serif;
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(109, 40, 217, 0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(109, 40, 217, 0.6); }
+
+/* ─── Typography ────────────────────────────────────────────── */
+h1, h2, h3, h4, h5 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+}
+
+/* ─── Angular Material Overrides ───────────────────────────── */
+.mat-mdc-card {
+  border-radius: 16px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+.mat-mdc-button, .mat-mdc-raised-button, .mat-mdc-flat-button {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.025em !important;
+}
+
+.mat-mdc-form-field {
+  .mat-mdc-text-field-wrapper { border-radius: 12px; }
+}
+
+/* ─── Custom Components ─────────────────────────────────────── */
+.tikane-card {
+  @apply bg-white dark:bg-tikane-dark-card rounded-2xl shadow-card p-6 transition-all duration-300;
+  border: 1px solid var(--surface-border);
+
+  &:hover {
+    @apply shadow-card-hover;
+  }
+}
+
+.tikane-gradient-btn {
+  background: #1e40af !important;
+  color: white !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+
+  &:hover {
+    transform: translateY(-1px);
+    background: #1e3a8a !important;
+    box-shadow: 0 6px 20px rgba(30, 64, 175, 0.35) !important;
+  }
+}
+
+.tikane-stat-card {
+  @apply tikane-card relative overflow-hidden;
+
+  .stat-icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center text-white text-2xl;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold font-display mt-4;
+  }
+
+  .stat-label {
+    @apply text-sm mt-1;
+    color: var(--text-secondary);
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: -20px; right: -20px;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+  }
+}
+
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+
+  &.badge-success { @apply bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400; }
+  &.badge-warning { @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400; }
+  &.badge-danger { @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
+  &.badge-info { @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400; }
+  &.badge-purple { @apply bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400; }
+}
+
+/* Payment status badges */
+.status-SUCCESS { @apply badge badge-success; }
+.status-PENDING { @apply badge badge-warning; }
+.status-FAILED { @apply badge badge-danger; }
+.status-ACTIVE { @apply badge badge-success; }
+.status-SUSPENDED { @apply badge badge-danger; }
+.status-COMPLETED { @apply badge badge-info; }
+
+/* ─── Progress bar ──────────────────────────────────────────── */
+.tikane-progress {
+  @apply w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden;
+
+  .tikane-progress-bar {
+    @apply h-full rounded-full transition-all duration-500;
+    background: var(--tikane-gradient);
+  }
+}
+
+/* ─── Table ─────────────────────────────────────────────────── */
+.tikane-table {
+  @apply w-full border-collapse;
+
+  thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider;
+    color: var(--text-secondary);
+    background: var(--surface-card);
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  tbody td {
+    @apply px-4 py-4 text-sm;
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  tbody tr:hover {
+    background: var(--surface-card);
+  }
+}
+
+/* ─── Animations ────────────────────────────────────────────── */
+.animate-on-enter {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.skeleton {
+  @apply animate-pulse bg-gray-200 dark:bg-gray-700 rounded;
+}
+
+/* ─── Page layouts ──────────────────────────────────────────── */
+.page-header {
+  @apply mb-8;
+
+  h1 {
+    @apply text-2xl font-bold mb-1;
+    color: var(--text-primary);
+  }
+
+  p {
+    @apply text-sm;
+    color: var(--text-secondary);
+  }
+}
+
+/* ─── Sidebar ───────────────────────────────────────────────── */
+.sidebar-nav-item {
+  @apply flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer;
+  color: var(--text-secondary);
+
+  &:hover {
+    background: rgba(109, 40, 217, 0.1);
+    color: var(--tikane-purple);
+  }
+
+  &.active {
+    background: rgba(109, 40, 217, 0.15);
+    color: var(--tikane-purple);
+    font-weight: 600;
+  }
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; }
+}
