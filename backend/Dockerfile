@@ -1,6 +1,8 @@
 # ─── Stage 1: Build ───────────────────────────────────────────
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps && npm cache clean --force
@@ -10,6 +12,8 @@ RUN npm run build
 
 # ─── Stage 2: Development ─────────────────────────────────────
 FROM node:20-alpine AS development
+
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 COPY package*.json ./
@@ -22,6 +26,8 @@ CMD ["npm", "run", "dev"]
 
 # ─── Stage 3: Production ──────────────────────────────────────
 FROM node:20-alpine AS production
+
+RUN apk add --no-cache openssl
 
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 tikane
