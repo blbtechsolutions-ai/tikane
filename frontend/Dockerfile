@@ -1,6 +1,10 @@
 # ─── Stage 1: Development ──────────────────────────────────────
-FROM node:20-alpine AS development
+FROM node:20-bookworm-slim AS development
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 RUN npm ci
@@ -12,8 +16,12 @@ CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--port", "4200", "--poll", "200
 
 
 # ─── Stage 2: Builder ──────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 RUN npm ci
