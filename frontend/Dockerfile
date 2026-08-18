@@ -32,7 +32,7 @@ RUN npx ng build --configuration production
 
 # ─── Stage 3: Production (Nginx) ───────────────────────────────
 FROM nginx:1.25-alpine AS production
-ENV PORT=80
+ENV PORT=3000
 
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
@@ -45,7 +45,7 @@ RUN chmod +x /docker-entrypoint.d/10-runtime-env.sh
 # Copy built app
 COPY --from=builder /app/dist/tikane/browser /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/ || exit 1
