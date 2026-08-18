@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci && npm cache clean --force
+RUN npm install --legacy-peer-deps && npm cache clean --force
 COPY . .
 RUN npm run prisma:generate
 RUN npm run build
@@ -13,7 +13,7 @@ FROM node:20-alpine AS development
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci && npm cache clean --force
+RUN npm install --legacy-peer-deps && npm cache clean --force
 COPY . .
 RUN npm run prisma:generate
 
