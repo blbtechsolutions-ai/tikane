@@ -58,7 +58,10 @@ export const config = {
   env: parsed.data.NODE_ENV,
   port: parseInt(parsed.data.PORT, 10),
   appUrl: parsed.data.APP_URL,
-  frontendUrl: parsed.data.FRONTEND_URL,
+  frontendUrl: parsed.data.FRONTEND_URL.split(',')[0].trim(),
+  frontendUrls: parsed.data.FRONTEND_URL.split(',')
+    .map((url) => url.trim())
+    .filter(Boolean),
   apiPrefix: parsed.data.API_PREFIX,
   isDev: parsed.data.NODE_ENV === 'development',
   isProd: parsed.data.NODE_ENV === 'production',

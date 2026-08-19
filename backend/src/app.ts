@@ -36,7 +36,8 @@ export function createApp(): Application {
   app.use(cors({
     origin: (origin, callback) => {
       const allowed = [
-        config.frontendUrl,
+        ...config.frontendUrls,
+        'https://tikane.blbtech.net',
         'http://localhost:4200',
         'http://localhost:3000',
       ];
