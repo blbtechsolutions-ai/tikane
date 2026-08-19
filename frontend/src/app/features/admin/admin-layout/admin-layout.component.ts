@@ -29,7 +29,7 @@ interface NavSection {
           <div *ngIf="sidebarOpen()">
             <span class="font-bold text-lg font-display" style="color: var(--text-primary)">SABOTAY</span>
             <span class="text-xs ml-2 px-1.5 py-0.5 rounded text-white text-opacity-80"
-              style="background: rgba(109,40,217,0.6); font-size: 10px">ADMIN</span>
+              style="background: rgba(109,40,217,0.6); font-size: 10px">{{ adminRoleLabel }}</span>
           </div>
         </div>
 
@@ -154,6 +154,10 @@ export class AdminLayoutComponent implements OnInit {
     const u = this.auth.currentUser;
     if (!u) return '?';
     return `${u.firstName[0]}${u.lastName[0]}`.toUpperCase();
+  }
+
+  get adminRoleLabel(): string {
+    return this.auth.currentUser?.role === 'SUPER_ADMIN' ? 'SUPER ADMIN' : 'ADMIN';
   }
 
   toggleTheme(): void {
