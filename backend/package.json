@@ -12,7 +12,7 @@
     "prisma:migrate:prod": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:admin-password": "ts-node prisma/admin-password.ts",
+    "prisma:admin-password": "node prisma/admin-password.js",
     "prisma:reset": "prisma migrate reset",
     "lint": "eslint src --ext .ts",
     "test": "jest",
