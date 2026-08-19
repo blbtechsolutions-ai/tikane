@@ -9,12 +9,16 @@ import { AdminService } from '../admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { User } from '../../../core/models/user.model';
 
-interface ClientDraft {
+type UserCreationTab = 'client' | 'agent' | 'admin';
+
+interface UserDraft {
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
   password: string;
+  commissionRate: number;
+  zone: string;
   preferredLanguage: 'fr' | 'ht';
 }
 
@@ -23,6 +27,7 @@ interface CreatedCredentials {
   email: string;
   password: string;
   role: string;
+  agentCode?: string;
 }
 
 @Component({
@@ -36,15 +41,21 @@ interface CreatedCredentials {
         <p>{{ pagination.total }} comptes affichés</p>
       </div>
 
-      <!-- Tabs: Client / Admin creation -->
+      <!-- Tabs: Client / Agent / Admin creation -->
       <div class="flex gap-2 border-b" style="border-color: var(--surface-border)">
-        <button (click)="activeTab = 'client'"
+        <button (click)="setActiveTab('client')"
           class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
           [style.border-color]="activeTab === 'client' ? '#1e40af' : 'transparent'"
           [style.color]="activeTab === 'client' ? '#1e40af' : 'var(--text-muted)'">
           Nouveau client
         </button>
-        <button *ngIf="isSuperAdmin" (click)="activeTab = 'admin'"
+        <button (click)="setActiveTab('agent')"
+          class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+          [style.border-color]="activeTab === 'agent' ? '#1e40af' : 'transparent'"
+          [style.color]="activeTab === 'agent' ? '#1e40af' : 'var(--text-muted)'">
+          Nouvel agent
+        </button>
+        <button *ngIf="isSuperAdmin" (click)="setActiveTab('admin')"
           class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
           [style.border-color]="activeTab === 'admin' ? '#1e40af' : 'transparent'"
           [style.color]="activeTab === 'admin' ? '#1e40af' : 'var(--text-muted)'">
@@ -56,10 +67,11 @@ interface CreatedCredentials {
         <div class="tikane-card xl:col-span-2 space-y-4">
           <div>
             <h3 class="font-semibold" style="color: var(--text-primary)">
-              {{ activeTab === 'admin' ? 'Créer un administrateur' : 'Nouveau client' }}
+              {{ creationTitle }}
             </h3>
             <p class="text-sm" style="color: var(--text-muted)">
               <span *ngIf="activeTab === 'client'">Créez un compte client avec un mot de passe temporaire. Le client pourra ensuite se connecter et changer son mot de passe.</span>
+              <span *ngIf="activeTab === 'agent'">Créez un compte agent avec accès à l'espace terrain. L'agent pourra collecter les paiements des clients.</span>
               <span *ngIf="activeTab === 'admin'">Créez un compte administrateur. Réservé aux super-admins. L'admin aura accès à la gestion complète de la plateforme.</span>
             </p>
           </div>
@@ -109,13 +121,27 @@ interface CreatedCredentials {
                 <option value="ht">Kreyòl</option>
               </select>
             </div>
+
+            <div *ngIf="activeTab === 'agent'">
+              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">Zone / Secteur</label>
+              <input [(ngModel)]="draft.zone" name="zone" placeholder="Ex: Port-au-Prince Nord"
+                class="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                style="background: var(--surface-bg); border: 1px solid var(--surface-border); color: var(--text-primary)" />
+            </div>
+
+            <div *ngIf="activeTab === 'agent'">
+              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">Commission (%)</label>
+              <input [(ngModel)]="draft.commissionRate" name="commissionRate" type="number" min="0" max="100" step="0.5"
+                class="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                style="background: var(--surface-bg); border: 1px solid var(--surface-border); color: var(--text-primary)" />
+            </div>
           </div>
 
           <div class="flex justify-end">
             <button mat-flat-button type="button" (click)="createUser()" [disabled]="creating"
               class="!rounded-xl text-white" style="background: #1e40af">
               <mat-icon class="mr-2">person_add</mat-icon>
-              {{ creating ? 'Création...' : (activeTab === 'admin' ? "Créer l'admin" : 'Créer le client') }}
+              {{ creating ? 'Création...' : creationButtonLabel }}
             </button>
           </div>
         </div>
@@ -126,6 +152,10 @@ interface CreatedCredentials {
             <p style="color: var(--text-secondary)"><strong style="color: var(--text-primary)">{{ credentials.role }}:</strong> {{ credentials.fullName }}</p>
             <p style="color: var(--text-secondary)"><strong style="color: var(--text-primary)">Email:</strong> {{ credentials.email }}</p>
             <p style="color: var(--text-secondary)"><strong style="color: var(--text-primary)">Mot de passe:</strong> {{ credentials.password }}</p>
+            <p *ngIf="credentials.agentCode" style="color: var(--text-secondary)">
+              <strong style="color: var(--text-primary)">Code agent:</strong>
+              <span class="font-mono ml-1">{{ credentials.agentCode }}</span>
+            </p>
           </div>
           <p class="text-xs mt-3" style="color: var(--text-muted)">
             La personne pourra se connecter puis modifier ce mot de passe depuis son espace.
@@ -276,12 +306,30 @@ export class UsersManagementComponent implements OnInit {
   filterStatus = '';
   page = 1;
   pagination = { page: 1, totalPages: 1, total: 0, hasPrev: false, hasNext: false };
-  draft: ClientDraft = this.createEmptyDraft();
+  draft: UserDraft = this.createEmptyDraft();
   lastCreatedCredentials: CreatedCredentials | null = null;
-  activeTab: 'client' | 'admin' = 'client';
+  activeTab: UserCreationTab = 'client';
 
   get isSuperAdmin(): boolean {
     return this.auth.currentUser?.role === 'SUPER_ADMIN';
+  }
+
+  get creationTitle(): string {
+    const titles: Record<UserCreationTab, string> = {
+      client: 'Nouveau client',
+      agent: 'Créer un agent',
+      admin: 'Créer un administrateur',
+    };
+    return titles[this.activeTab];
+  }
+
+  get creationButtonLabel(): string {
+    const labels: Record<UserCreationTab, string> = {
+      client: 'Créer le client',
+      agent: "Créer l'agent",
+      admin: "Créer l'admin",
+    };
+    return labels[this.activeTab];
   }
 
   private searchTimeout: any;
@@ -289,6 +337,13 @@ export class UsersManagementComponent implements OnInit {
   constructor(private adminService: AdminService, private toastr: ToastrService, private auth: AuthService) {}
 
   ngOnInit(): void { this.loadUsers(); }
+
+  setActiveTab(tab: UserCreationTab): void {
+    this.activeTab = tab;
+    this.filterRole = this.roleForTab(tab);
+    this.page = 1;
+    this.loadUsers();
+  }
 
   loadUsers(): void {
     this.loading = true;
@@ -357,21 +412,30 @@ export class UsersManagementComponent implements OnInit {
 
     const call = this.activeTab === 'admin'
       ? this.adminService.createAdmin(data)
-      : this.adminService.createClient(data);
+      : this.activeTab === 'agent'
+        ? this.adminService.createAgentWithUser({
+            ...data,
+            commissionRate: this.draft.commissionRate,
+            zone: this.draft.zone.trim() || undefined,
+          })
+        : this.adminService.createClient(data);
 
     call.subscribe({
-      next: (user) => {
+      next: (created) => {
+        const user = this.activeTab === 'agent' ? created.user : created;
         this.lastCreatedCredentials = {
           fullName: `${user.firstName} ${user.lastName}`,
           email: user.email,
           password: this.draft.password,
-          role: this.activeTab === 'admin' ? 'Admin' : 'Client',
+          role: this.roleLabel(this.activeTab),
+          agentCode: this.activeTab === 'agent' ? created.agentCode : undefined,
         };
         this.draft = this.createEmptyDraft();
         this.creating = false;
+        this.filterRole = this.roleForTab(this.activeTab);
         this.page = 1;
         this.loadUsers();
-        this.toastr.success(this.activeTab === 'admin' ? 'Compte admin créé' : 'Compte client créé');
+        this.toastr.success(`${this.roleLabel(this.activeTab)} créé avec succès`);
       },
       error: (err) => { this.toastr.error(err?.error?.message ?? 'Erreur lors de la création'); this.creating = false; },
     });
@@ -384,10 +448,40 @@ export class UsersManagementComponent implements OnInit {
     if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(this.draft.password)) {
       return 'Le mot de passe doit contenir 8 caractères, une majuscule, une minuscule et un chiffre';
     }
+    if (this.activeTab === 'agent' && (this.draft.commissionRate < 0 || this.draft.commissionRate > 100)) {
+      return 'La commission doit être comprise entre 0 et 100';
+    }
     return null;
   }
 
-  private createEmptyDraft(): ClientDraft {
-    return { firstName: '', lastName: '', email: '', phone: '', password: '', preferredLanguage: 'fr' };
+  private roleForTab(tab: UserCreationTab): string {
+    const roles: Record<UserCreationTab, string> = {
+      client: 'CLIENT',
+      agent: 'AGENT',
+      admin: 'ADMIN',
+    };
+    return roles[tab];
+  }
+
+  private roleLabel(tab: UserCreationTab): string {
+    const labels: Record<UserCreationTab, string> = {
+      client: 'Client',
+      agent: 'Agent',
+      admin: 'Admin',
+    };
+    return labels[tab];
+  }
+
+  private createEmptyDraft(): UserDraft {
+    return {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      password: '',
+      commissionRate: 2.5,
+      zone: '',
+      preferredLanguage: 'fr',
+    };
   }
 }
