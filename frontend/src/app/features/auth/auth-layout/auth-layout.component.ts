@@ -490,10 +490,18 @@ import { RouterOutlet } from '@angular/router';
       }
 
       @media (max-width: 1100px) {
+        :host {
+          min-height: 100dvh;
+          height: auto;
+        }
+
         .auth-screen {
           grid-template-columns: 1fr;
-          grid-template-rows: 38vh minmax(0, 1fr);
-          height: 100dvh;
+          grid-template-rows: clamp(220px, 34dvh, 320px) auto;
+          min-height: 100dvh;
+          height: auto;
+          overflow-x: hidden;
+          overflow-y: auto;
         }
 
         .auth-art {
@@ -509,6 +517,7 @@ import { RouterOutlet } from '@angular/router';
 
         .auth-form-wrap {
           max-width: none;
+          height: auto;
           align-items: flex-start;
           padding: 34px 28px 30px;
         }
@@ -516,7 +525,7 @@ import { RouterOutlet } from '@angular/router';
 
       @media (max-width: 640px) {
         .auth-screen {
-          grid-template-rows: 36vh minmax(0, 1fr);
+          grid-template-rows: clamp(190px, 32dvh, 280px) auto;
         }
 
         .auth-art__svg {
@@ -524,7 +533,7 @@ import { RouterOutlet } from '@angular/router';
         }
 
         .auth-form-wrap {
-          padding: 28px 22px 24px;
+          padding: 24px 22px calc(32px + env(safe-area-inset-bottom));
         }
       }
     `,
