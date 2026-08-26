@@ -36,6 +36,7 @@ enum PlanType {
   WEEKLY        // Ex: 1000 HTG/semaine
   MONTHLY       // Ex: 5000 HTG/mois
   SABOTAY       // Avec intérêt
+  SAVINGS       // Epargne libre, versements sans echeancier
 }
 
 enum PlanStatus {
@@ -428,7 +429,7 @@ model Subscription {
   caNeetFeePaid       Boolean            @default(false)
 
   // Progress
-  currentDay          Int                @default(1)
+  currentDay          Int                @default(0)
   totalDays           Int
   missedPayments      Int                @default(0)
   latePayments        Int                @default(0)

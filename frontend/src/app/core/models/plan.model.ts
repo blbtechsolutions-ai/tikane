@@ -39,7 +39,7 @@ export interface PlanSchedule {
   label: string;
 }
 
-export type PlanType = 'PROGRESSIVE' | 'FIXED_DAILY' | 'WEEKLY' | 'MONTHLY' | 'SABOTAY';
+export type PlanType = 'PROGRESSIVE' | 'FIXED_DAILY' | 'WEEKLY' | 'MONTHLY' | 'SABOTAY' | 'SAVINGS';
 export type PlanStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
 
 export const PLAN_TYPE_LABELS: Record<PlanType, string> = {
@@ -48,6 +48,7 @@ export const PLAN_TYPE_LABELS: Record<PlanType, string> = {
   WEEKLY: 'Sòl hebdomadaire',
   MONTHLY: 'Sòl mensuel',
   SABOTAY: 'Sabotay / Carnet journalier',
+  SAVINGS: 'Epargne libre',
 };
 
 export const PLAN_TYPE_LABELS_HT: Record<PlanType, string> = {
@@ -56,4 +57,5 @@ export const PLAN_TYPE_LABELS_HT: Record<PlanType, string> = {
   WEEKLY: 'Sòl chak semèn',
   MONTHLY: 'Sòl chak mwa',
   SABOTAY: 'Sabotay / Kanè chak jou',
+  SAVINGS: 'Epay lib',
 };

@@ -8,6 +8,12 @@ import {
 } from '../../common/utils/helpers';
 import { CreatePaymentDtoType } from './payments.dto';
 
+interface PaymentRule {
+  dayNumber?: number;
+  expectedAmount?: number;
+  isSavings: boolean;
+}
+
 export class PaymentsService {
   async createPayment(userId: string, dto: CreatePaymentDtoType) {
     return this.createPaymentForUser(userId, dto, userId);
@@ -17,8 +23,8 @@ export class PaymentsService {
     const sub = await prisma.subscription.findFirst({
       where: { id: dto.subscriptionId, status: 'ACTIVE' },
       include: {
-        plan: true,
-        payments: { where: { status: 'SUCCESS' }, select: { dayNumber: true } },
+        plan: { include: { planSchedules: { orderBy: { dayNumber: 'asc' } } } },
+        payments: { where: { status: { in: ['SUCCESS', 'PENDING'] } }, select: { id: true, dayNumber: true, status: true } },
       },
     });
 
@@ -31,6 +37,8 @@ export class PaymentsService {
       }
     }
 
+    const paymentRule = this.validatePaymentRequest(sub, dto);
+
     const referenceNumber = generateReference('PAY');
     const payment = await prisma.payment.create({
       data: {
@@ -41,7 +49,7 @@ export class PaymentsService {
         currency: sub.plan.currency,
         method: 'CASH',
         status: 'PENDING',
-        dayNumber: dto.dayNumber,
+        dayNumber: paymentRule.dayNumber,
         notes: dto.notes,
       },
     });
@@ -87,8 +95,8 @@ export class PaymentsService {
     const sub = await prisma.subscription.findFirst({
       where: { id: dto.subscriptionId, userId, status: 'ACTIVE' },
       include: {
-        plan: true,
-        payments: { where: { status: 'SUCCESS' }, select: { dayNumber: true } },
+        plan: { include: { planSchedules: { orderBy: { dayNumber: 'asc' } } } },
+        payments: { where: { status: { in: ['SUCCESS', 'PENDING'] } }, select: { id: true, dayNumber: true, status: true } },
       },
     });
 
@@ -103,7 +111,8 @@ export class PaymentsService {
     }
 
     // Calculate penalty if late
-    const penaltyAmount = await this.calculatePenalty(sub, dto.dayNumber);
+    const paymentRule = this.validatePaymentRequest(sub, dto);
+    const penaltyAmount = await this.calculatePenalty(sub, paymentRule.dayNumber);
 
     const referenceNumber = generateReference('PAY');
     const payment = await prisma.payment.create({
@@ -116,7 +125,7 @@ export class PaymentsService {
         currency: sub.plan.currency,
         method: dto.method as any,
         status: 'PENDING',
-        dayNumber: dto.dayNumber,
+        dayNumber: paymentRule.dayNumber,
         scheduledDate: dto.scheduledDate ? new Date(dto.scheduledDate) : null,
         notes: dto.notes,
       },
@@ -133,7 +142,14 @@ export class PaymentsService {
   async confirmPayment(paymentId: string, confirmedBy: string, externalRef?: string, actorRole?: string) {
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
-      include: { subscription: { include: { plan: true } } },
+      include: {
+        subscription: {
+          include: {
+            plan: { include: { planSchedules: { orderBy: { dayNumber: 'asc' } } } },
+            payments: { where: { status: 'SUCCESS' }, select: { id: true, dayNumber: true, status: true } },
+          },
+        },
+      },
     });
 
     if (!payment) throw ApiError.notFound('Paiement introuvable');
@@ -148,9 +164,28 @@ export class PaymentsService {
     }
 
     const sub = payment.subscription;
+    const paymentRule = this.validatePaymentRequest(sub, {
+      subscriptionId: sub.id,
+      amount: toNumber(payment.amount),
+      method: payment.method,
+      dayNumber: payment.dayNumber ?? undefined,
+    });
     const amount = toNumber(payment.amount);
     const totalPaid = toNumber(sub.totalPaid) + amount;
-    const remainingAmount = Math.max(0, toNumber(sub.totalDue) - totalPaid);
+    const remainingAmount = paymentRule.isSavings
+      ? 0
+      : Math.max(0, toNumber(sub.totalDue) - totalPaid);
+    const paidDayNumbers = new Set(
+      sub.payments
+        .filter((p) => p.dayNumber != null)
+        .map((p) => p.dayNumber as number),
+    );
+    if (paymentRule.dayNumber != null) {
+      paidDayNumbers.add(paymentRule.dayNumber);
+    }
+    const progressDay = paymentRule.isSavings
+      ? 0
+      : Math.min(sub.totalDays, Math.max(...Array.from(paidDayNumbers), 0));
 
     const transactionRef = generateReference('TXN');
 
@@ -162,6 +197,7 @@ export class PaymentsService {
           status: 'SUCCESS',
           paidAt: new Date(),
           externalReference: externalRef,
+          dayNumber: paymentRule.dayNumber,
         },
       });
 
@@ -183,14 +219,14 @@ export class PaymentsService {
       });
 
       // Update subscription
-      const isCompleted = remainingAmount === 0;
+      const isCompleted = !paymentRule.isSavings && remainingAmount === 0;
       await tx.subscription.update({
         where: { id: sub.id },
         data: {
           totalPaid: totalPaid,
           remainingAmount,
           lastPaymentDate: new Date(),
-          currentDay: (sub.currentDay ?? 0) + 1,
+          currentDay: progressDay,
           status: isCompleted ? 'COMPLETED' : 'ACTIVE',
           ...(isCompleted ? { touchStatus: 'READY' } : {}),
         },
@@ -323,6 +359,69 @@ export class PaymentsService {
     }
 
     return agent;
+  }
+
+  private validatePaymentRequest(
+    sub: any,
+    dto: Pick<CreatePaymentDtoType, 'amount' | 'dayNumber' | 'subscriptionId' | 'method'>,
+  ): PaymentRule {
+    const amount = toNumber(dto.amount);
+
+    if (sub.plan.type === 'SAVINGS') {
+      if (dto.dayNumber != null) {
+        throw ApiError.badRequest('Les versements d\'epargne libre ne doivent pas avoir de jour');
+      }
+
+      return { isSavings: true };
+    }
+
+    const paidDayNumbers = new Set(
+      (sub.payments ?? [])
+        .filter((payment: any) => payment.status === 'SUCCESS' && payment.dayNumber != null)
+        .map((payment: any) => payment.dayNumber),
+    );
+    const pendingDayNumbers = new Set(
+      (sub.payments ?? [])
+        .filter((payment: any) => payment.status === 'PENDING' && payment.dayNumber != null)
+        .map((payment: any) => payment.dayNumber),
+    );
+    const nextSchedule = [...(sub.plan.planSchedules ?? [])]
+      .sort((a: any, b: any) => a.dayNumber - b.dayNumber)
+      .find((schedule: any) => !paidDayNumbers.has(schedule.dayNumber));
+
+    if (!nextSchedule) {
+      throw ApiError.conflict('Ce carnet est deja complet');
+    }
+
+    const expectedDayNumber = Number(nextSchedule.dayNumber);
+    const expectedAmount = toNumber(nextSchedule.amount);
+
+    if (dto.dayNumber != null && dto.dayNumber !== expectedDayNumber) {
+      throw ApiError.badRequest(`Le prochain versement attendu est le jour ${expectedDayNumber}`);
+    }
+
+    if (pendingDayNumbers.has(expectedDayNumber)) {
+      throw ApiError.conflict(`Un paiement est deja en attente pour le jour ${expectedDayNumber}`);
+    }
+
+    if (!this.sameMoneyAmount(amount, expectedAmount)) {
+      throw ApiError.badRequest(`Le montant attendu pour le jour ${expectedDayNumber} est ${expectedAmount} HTG`);
+    }
+
+    const totalAfterPayment = toNumber(sub.totalPaid) + amount;
+    if (totalAfterPayment - toNumber(sub.totalDue) > 0.005) {
+      throw ApiError.badRequest('Ce versement depasse le montant restant du carnet');
+    }
+
+    return {
+      isSavings: false,
+      dayNumber: expectedDayNumber,
+      expectedAmount,
+    };
+  }
+
+  private sameMoneyAmount(left: number, right: number): boolean {
+    return Math.round(left * 100) === Math.round(right * 100);
   }
 
   private async calculatePenalty(sub: any, dayNumber?: number): Promise<number> {

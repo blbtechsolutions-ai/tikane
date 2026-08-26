@@ -63,15 +63,15 @@ import { Plan, PlanType, PLAN_TYPE_LABELS } from '../../../core/models/plan.mode
 
           <!-- Key info -->
           <div class="space-y-2 mb-5">
-            <div class="flex justify-between text-sm">
+            <div class="flex justify-between text-sm" *ngIf="plan.type !== 'SAVINGS'">
               <span style="color: var(--text-muted)">Durée</span>
               <span class="font-medium" style="color: var(--text-primary)">{{ plan.durationDays }} jours</span>
             </div>
-            <div class="flex justify-between text-sm">
+            <div class="flex justify-between text-sm" *ngIf="plan.type !== 'SAVINGS'">
               <span style="color: var(--text-muted)">Montant total</span>
               <span class="font-bold text-purple-600">{{ plan.totalAmount | number }} HTG</span>
             </div>
-            <div class="flex justify-between text-sm">
+            <div class="flex justify-between text-sm" *ngIf="plan.type !== 'SAVINGS'">
               <span style="color: var(--text-muted)">{{ plan.type === 'SABOTAY' ? 'Montant à toucher' : 'Montant final' }}</span>
               <span class="font-bold text-emerald-500">{{ plan.finalAmount | number }} HTG</span>
             </div>
@@ -82,6 +82,10 @@ import { Plan, PlanType, PLAN_TYPE_LABELS } from '../../../core/models/plan.mode
             <div *ngIf="plan.caNeetFee > 0" class="flex justify-between text-sm">
               <span style="color: var(--text-muted)">Frais carnet</span>
               <span style="color: var(--text-primary)">{{ plan.caNeetFee | number }} HTG</span>
+            </div>
+            <div class="flex justify-between text-sm" *ngIf="plan.type === 'SAVINGS'">
+              <span style="color: var(--text-muted)">Versements</span>
+              <span class="font-bold text-emerald-500">Libres</span>
             </div>
           </div>
 
@@ -116,7 +120,7 @@ export class PlansListComponent implements OnInit {
   plans: Plan[] = [];
   filterType: PlanType | '' = '';
   planTypeLabels = PLAN_TYPE_LABELS;
-  types: Array<PlanType | ''> = ['', 'PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY', 'SABOTAY'];
+  types: Array<PlanType | ''> = ['', 'SAVINGS', 'PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY', 'SABOTAY'];
 
   constructor(
     private clientService: ClientService,

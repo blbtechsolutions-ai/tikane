@@ -45,7 +45,7 @@ import { Subscription } from '../../../core/models/payment.model';
               </p>
 
               <!-- Progress -->
-              <div class="mb-2">
+              <div class="mb-2" *ngIf="!isSavings(sub)">
                 <div class="flex justify-between text-xs mb-1" style="color: var(--text-muted)">
                   <span>Progression</span>
                   <span>{{ sub.currentDay }}/{{ sub.totalDays }} jours</span>
@@ -57,11 +57,12 @@ import { Subscription } from '../../../core/models/payment.model';
               </div>
 
               <div class="flex flex-wrap gap-3 text-xs mb-3" style="color: var(--text-muted)">
-                <span *ngIf="sub.withdrawalAllowedAt">Touche dispo: {{ sub.withdrawalAllowedAt | date:'dd/MM/yyyy' }}</span>
+                <span *ngIf="isSavings(sub)">Solde epargne: {{ sub.totalPaid | number }} HTG</span>
+                <span *ngIf="sub.withdrawalAllowedAt && !isSavings(sub)">Touche dispo: {{ sub.withdrawalAllowedAt | date:'dd/MM/yyyy' }}</span>
                 <span *ngIf="sub.plan?.finalAmount">Montant à toucher: {{ sub.plan?.finalAmount | number }} HTG</span>
               </div>
 
-              <div class="grid grid-cols-3 gap-2 mt-3">
+              <div class="grid grid-cols-3 gap-2 mt-3" *ngIf="!isSavings(sub)">
                 <div class="text-center">
                   <p class="text-xs font-bold text-emerald-500">{{ sub.totalPaid | number }}</p>
                   <p class="text-xs" style="color: var(--text-muted)">Payé (HTG)</p>
@@ -73,6 +74,12 @@ import { Subscription } from '../../../core/models/payment.model';
                 <div class="text-center">
                   <p class="text-xs font-bold text-blue-500">{{ sub.totalDue | number }}</p>
                   <p class="text-xs" style="color: var(--text-muted)">Total (HTG)</p>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 gap-2 mt-3" *ngIf="isSavings(sub)">
+                <div class="text-center">
+                  <p class="text-xs font-bold text-emerald-500">{{ sub.totalPaid | number }}</p>
+                  <p class="text-xs" style="color: var(--text-muted)">Solde (HTG)</p>
                 </div>
               </div>
             </div>
@@ -129,5 +136,9 @@ export class SubscriptionsComponent implements OnInit {
       default:
         return 'var(--text-secondary)';
     }
+  }
+
+  isSavings(sub: Subscription): boolean {
+    return sub.plan?.type === 'SAVINGS';
   }
 }

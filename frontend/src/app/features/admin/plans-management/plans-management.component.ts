@@ -82,14 +82,14 @@ interface PlanPreview {
               </select>
             </div>
 
-            <div>
+            <div *ngIf="!isSavingsDraft">
               <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">Durée</label>
               <input [(ngModel)]="draft.durationDays" name="durationDays" type="number" min="1"
                 class="w-full px-3 py-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500"
                 style="background: var(--surface-bg); border: 1px solid var(--surface-border); color: var(--text-primary)" />
             </div>
 
-            <div>
+            <div *ngIf="!isSavingsDraft">
               <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">
                 {{ usesFixedAmount ? 'Montant de base' : 'Montant jour 1' }}
               </label>
@@ -187,6 +187,9 @@ interface PlanPreview {
             </div>
 
             <div class="space-y-2">
+              <div *ngIf="preview.schedule.length === 0" class="text-sm rounded-xl px-3 py-3" style="background: var(--surface-bg); color: var(--text-muted)">
+                Versements libres sans echeancier.
+              </div>
               <div *ngFor="let item of preview.schedule | slice:0:6"
                 class="flex items-center justify-between rounded-xl px-3 py-2"
                 style="background: var(--surface-bg)">
@@ -218,21 +221,25 @@ interface PlanPreview {
           </div>
 
           <div class="space-y-1.5 mb-4 text-sm">
-            <div class="flex justify-between">
+            <div class="flex justify-between" *ngIf="plan.type !== 'SAVINGS'">
               <span style="color: var(--text-muted)">Durée</span>
               <span style="color: var(--text-primary)">{{ plan.durationDays }}j</span>
             </div>
-            <div class="flex justify-between">
+            <div class="flex justify-between" *ngIf="plan.type !== 'SAVINGS'">
               <span style="color: var(--text-muted)">Total</span>
               <span class="font-semibold text-purple-600">{{ plan.totalAmount | number }} HTG</span>
             </div>
-            <div class="flex justify-between">
+            <div class="flex justify-between" *ngIf="plan.type !== 'SAVINGS'">
               <span style="color: var(--text-muted)">Final</span>
               <span class="font-semibold text-emerald-500">{{ plan.finalAmount | number }} HTG</span>
             </div>
             <div class="flex justify-between" *ngIf="plan._count">
               <span style="color: var(--text-muted)">Souscriptions</span>
               <span style="color: var(--text-primary)">{{ plan._count.subscriptions }}</span>
+            </div>
+            <div class="flex justify-between" *ngIf="plan.type === 'SAVINGS'">
+              <span style="color: var(--text-muted)">Regle</span>
+              <span class="font-semibold text-emerald-500">Depots libres</span>
             </div>
           </div>
 
@@ -271,7 +278,7 @@ export class PlansManagementComponent implements OnInit {
   plans: Plan[] = [];
   loading = true;
   planTypeLabels = PLAN_TYPE_LABELS;
-  availableTypes: Plan['type'][] = ['SABOTAY', 'PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY'];
+  availableTypes: Plan['type'][] = ['SAVINGS', 'SABOTAY', 'PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY'];
   showCreateForm = false;
   creating = false;
   previewLoading = false;
@@ -300,6 +307,10 @@ export class PlansManagementComponent implements OnInit {
     return this.draft.type === 'PROGRESSIVE';
   }
 
+  get isSavingsDraft(): boolean {
+    return this.draft.type === 'SAVINGS';
+  }
+
   get usesFixedAmount(): boolean {
     return ['FIXED_DAILY', 'WEEKLY', 'MONTHLY', 'SABOTAY'].includes(this.draft.type);
   }
@@ -312,7 +323,12 @@ export class PlansManagementComponent implements OnInit {
   }
 
   onTypeChange(): void {
-    if (this.usesFixedAmount && !this.draft.fixedAmount) {
+    if (this.isSavingsDraft) {
+      this.draft.durationDays = 0;
+      this.draft.startAmount = 0;
+      this.draft.fixedAmount = 0;
+      this.draft.incrementAmount = 0;
+    } else if (this.usesFixedAmount && !this.draft.fixedAmount) {
       this.draft.fixedAmount = this.draft.startAmount;
     }
     this.preview = null;
@@ -375,7 +391,7 @@ export class PlansManagementComponent implements OnInit {
       return false;
     }
 
-    if (this.draft.durationDays < 1 || this.draft.startAmount <= 0) {
+    if (!this.isSavingsDraft && (this.draft.durationDays < 1 || this.draft.startAmount <= 0)) {
       if (showToast) this.toastr.error('La durée et le montant de base doivent être valides');
       return false;
     }
@@ -398,8 +414,8 @@ export class PlansManagementComponent implements OnInit {
       name: this.draft.name.trim(),
       description: this.draft.description.trim() || undefined,
       type: this.draft.type,
-      durationDays: Number(this.draft.durationDays),
-      startAmount: Number(this.draft.startAmount),
+      durationDays: this.isSavingsDraft ? 0 : Number(this.draft.durationDays),
+      startAmount: this.isSavingsDraft ? 0 : Number(this.draft.startAmount),
       registrationFee: Number(this.draft.registrationFee || 0),
       caNeetFee: Number(this.draft.caNeetFee || 0),
       platformFeeRate: Number(this.draft.platformFeeRate || 0),

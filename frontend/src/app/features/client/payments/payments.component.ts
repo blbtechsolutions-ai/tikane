@@ -29,7 +29,7 @@ import { Payment, Subscription } from '../../../core/models/payment.model';
               <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">
                 Carnet / dossier
               </label>
-              <select formControlName="subscriptionId"
+              <select formControlName="subscriptionId" (change)="onSubscriptionChange()"
                 class="w-full px-3 py-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500"
                 style="background: var(--surface-card); border: 1px solid var(--surface-border); color: var(--text-primary)">
                 <option value="">Sélectionnez...</option>
@@ -56,9 +56,15 @@ import { Payment, Subscription } from '../../../core/models/payment.model';
               <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">
                 Montant (HTG)
               </label>
-              <input formControlName="amount" type="number" placeholder="0"
+              <input formControlName="amount" type="number" placeholder="0" [readonly]="selectedSubscription && !isSavings(selectedSubscription)"
                 class="w-full px-3 py-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500"
                 style="background: var(--surface-card); border: 1px solid var(--surface-border); color: var(--text-primary)" />
+              <p *ngIf="selectedSubscription && !isSavings(selectedSubscription)" class="mt-2 text-xs" style="color: var(--text-muted)">
+                Prochaine echeance: jour {{ selectedSubscription.nextPaymentDayNumber }} - {{ selectedSubscription.nextPaymentAmount | number }} HTG
+              </p>
+              <p *ngIf="selectedSubscription && isSavings(selectedSubscription)" class="mt-2 text-xs" style="color: var(--text-muted)">
+                Depot libre sur votre solde epargne.
+              </p>
             </div>
 
             <button type="submit" [disabled]="form.invalid || submitting"
@@ -150,7 +156,14 @@ export class PaymentsComponent implements OnInit {
   submit(): void {
     if (this.form.invalid) return;
     this.submitting = true;
-    this.clientService.createPayment(this.form.value).subscribe({
+    const sub = this.selectedSubscription;
+    const payload = {
+      ...this.form.value,
+      amount: Number(this.form.value.amount),
+      dayNumber: sub && !this.isSavings(sub) ? sub.nextPaymentDayNumber ?? undefined : undefined,
+    };
+
+    this.clientService.createPayment(payload).subscribe({
       next: () => {
         this.toastr.success('Versement enregistre avec succes!');
         this.form.patchValue({ amount: '' });
@@ -164,5 +177,25 @@ export class PaymentsComponent implements OnInit {
   paymentOptionLabel(sub: Subscription): string {
     const reference = sub.dossierNumber || sub.subscriptionNumber;
     return `${sub.plan?.name ?? 'Carnet'} - ${reference}`;
+  }
+
+  get selectedSubscription(): Subscription | undefined {
+    return this.activeSubscriptions.find((sub) => sub.id === this.form.value.subscriptionId);
+  }
+
+  isSavings(sub: Subscription): boolean {
+    return sub.plan?.type === 'SAVINGS';
+  }
+
+  onSubscriptionChange(): void {
+    const sub = this.selectedSubscription;
+    if (!sub) {
+      this.form.patchValue({ amount: '' });
+      return;
+    }
+
+    this.form.patchValue({
+      amount: this.isSavings(sub) ? '' : sub.nextPaymentAmount ?? '',
+    });
   }
 }

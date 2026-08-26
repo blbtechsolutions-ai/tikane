@@ -82,6 +82,8 @@ export interface Subscription {
   totalPenalties: number;
   currentDay: number;
   totalDays: number;
+  nextPaymentAmount?: number | null;
+  nextPaymentDayNumber?: number | null;
   missedPayments: number;
   latePayments: number;
   withdrawalAllowedAt?: string;

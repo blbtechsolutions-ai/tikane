@@ -39,35 +39,36 @@ import { CarnetCalendarComponent } from '../../../shared/carnet-calendar/carnet-
             <p class="text-2xl font-bold text-emerald-500">{{ sub.totalPaid | number }}</p>
             <p class="text-xs mt-1" style="color: var(--text-muted)">Payé (HTG)</p>
           </div>
-          <div class="text-center">
+          <div class="text-center" *ngIf="!isSavings">
             <p class="text-2xl font-bold text-amber-500">{{ sub.remainingAmount | number }}</p>
             <p class="text-xs mt-1" style="color: var(--text-muted)">Restant (HTG)</p>
           </div>
-          <div class="text-center">
+          <div class="text-center" *ngIf="!isSavings">
             <p class="text-2xl font-bold text-blue-500">{{ sub.currentDay }}</p>
             <p class="text-xs mt-1" style="color: var(--text-muted)">Jours payés</p>
           </div>
-          <div class="text-center">
+          <div class="text-center" *ngIf="!isSavings">
             <p class="text-2xl font-bold text-red-400">{{ sub.missedPayments }}</p>
             <p class="text-xs mt-1" style="color: var(--text-muted)">Manqués</p>
           </div>
         </div>
 
-        <div class="mb-1 flex justify-between text-xs" style="color: var(--text-muted)">
+        <div *ngIf="!isSavings" class="mb-1 flex justify-between text-xs" style="color: var(--text-muted)">
           <span>Progression: {{ sub.currentDay }}/{{ sub.totalDays }} jours</span>
           <span>{{ (sub.currentDay / sub.totalDays * 100) | number:'1.0-0' }}%</span>
         </div>
-        <div class="tikane-progress h-3">
+        <div *ngIf="!isSavings" class="tikane-progress h-3">
           <div class="tikane-progress-bar"
             [style.width]="(sub.currentDay / sub.totalDays * 100) + '%'"></div>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-3 text-xs" style="color: var(--text-muted)">
           <span>📅 Début: {{ sub.startDate | date:'dd/MM/yyyy' }}</span>
-          <span>📅 Fin: {{ sub.endDate | date:'dd/MM/yyyy' }}</span>
+          <span *ngIf="!isSavings">📅 Fin: {{ sub.endDate | date:'dd/MM/yyyy' }}</span>
           <span *ngIf="sub.nextPaymentDate">⏭ Prochain: {{ sub.nextPaymentDate | date:'dd/MM/yyyy' }}</span>
-          <span *ngIf="sub.withdrawalAllowedAt">💰 Touche disponible dès: {{ sub.withdrawalAllowedAt | date:'dd/MM/yyyy' }}</span>
-          <span *ngIf="sub.plan?.finalAmount">🎯 Montant à toucher: {{ sub.plan?.finalAmount | number }} HTG</span>
+          <span *ngIf="sub.withdrawalAllowedAt && !isSavings">💰 Touche disponible dès: {{ sub.withdrawalAllowedAt | date:'dd/MM/yyyy' }}</span>
+          <span *ngIf="sub.plan?.finalAmount && !isSavings">🎯 Montant à toucher: {{ sub.plan?.finalAmount | number }} HTG</span>
+          <span *ngIf="isSavings">Solde epargne: {{ sub.totalPaid | number }} HTG</span>
           <span *ngIf="sub.plan?.registrationFee">🗂 Frais dossier: {{ sub.plan?.registrationFee | number }} HTG</span>
           <span *ngIf="sub.plan?.caNeetFee">📘 Frais carnet: {{ sub.plan?.caNeetFee | number }} HTG</span>
           <span *ngIf="sub.touchStatus">🏁 Statut touche: {{ sub.touchStatus }}</span>
@@ -77,7 +78,7 @@ import { CarnetCalendarComponent } from '../../../shared/carnet-calendar/carnet-
       </div>
 
       <!-- Carnet calendrier de progression -->
-      <div class="tikane-card" *ngIf="sub?.progress?.length">
+      <div class="tikane-card" *ngIf="sub?.progress?.length && !isSavings">
         <div class="flex items-center justify-between mb-5">
           <div>
             <h3 class="font-semibold" style="color: var(--text-primary)">Carnet de versements</h3>
@@ -137,10 +138,10 @@ import { CarnetCalendarComponent } from '../../../shared/carnet-calendar/carnet-
             <div class="flex items-center gap-3">
               <div class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white"
                 [style.background]="p.status === 'SUCCESS' ? '#10b981' : p.status === 'PENDING' ? '#f59e0b' : '#ef4444'">
-                {{ p.dayNumber }}
+                {{ p.dayNumber || '-' }}
               </div>
               <div>
-                <p class="text-sm font-medium" style="color: var(--text-primary)">Jour {{ p.dayNumber }}</p>
+                <p class="text-sm font-medium" style="color: var(--text-primary)">{{ p.dayNumber ? ('Jour ' + p.dayNumber) : 'Depot libre' }}</p>
                 <p class="text-xs" style="color: var(--text-muted)">{{ p.paidAt | date:'dd/MM/yyyy HH:mm' }}</p>
               </div>
             </div>
@@ -161,6 +162,10 @@ import { CarnetCalendarComponent } from '../../../shared/carnet-calendar/carnet-
 export class SubscriptionDetailComponent implements OnInit {
   loading = true;
   sub: Subscription | null = null;
+
+  get isSavings(): boolean {
+    return this.sub?.plan?.type === 'SAVINGS';
+  }
 
   constructor(private route: ActivatedRoute, private clientService: ClientService) {}
 

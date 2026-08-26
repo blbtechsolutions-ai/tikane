@@ -14,6 +14,8 @@ import { Prisma } from '@prisma/client';
 
 export class PlansService {
   async createPlan(dto: CreatePlanDtoType, adminId: string) {
+    this.validatePlanConfiguration(dto);
+    dto = this.normalizePlanPayload(dto);
     const { totalAmount, finalAmount } = this.calculatePlanAmounts(dto);
 
     // Validate plan-type-specific fields
@@ -95,16 +97,29 @@ export class PlansService {
     const existing = await prisma.plan.findUnique({ where: { id } });
     if (!existing) throw ApiError.notFound('Plan introuvable');
 
-    const merged = { ...existing, ...dto };
+    const merged = this.normalizePlanPayload({ ...existing, ...dto } as any);
+    this.validatePlanConfiguration(merged);
     const { totalAmount, finalAmount } = this.calculatePlanAmounts(merged as any);
+    const updateData: Prisma.PlanUpdateInput = merged.type === 'SAVINGS'
+      ? {
+          ...dto,
+          durationDays: 0,
+          startAmount: 0,
+          incrementAmount: null,
+          fixedAmount: null,
+          interestRate: null,
+          totalAmount,
+          finalAmount,
+        }
+      : { ...dto, totalAmount, finalAmount };
 
     const plan = await prisma.plan.update({
       where: { id },
-      data: { ...dto, totalAmount, finalAmount },
+      data: updateData,
     });
 
     // Regenerate schedule if parameters changed
-    if (dto.durationDays || dto.startAmount || dto.incrementAmount || dto.fixedAmount) {
+    if (dto.type || dto.durationDays !== undefined || dto.startAmount !== undefined || dto.incrementAmount !== undefined || dto.fixedAmount !== undefined || dto.interestRate !== undefined) {
       await prisma.planSchedule.deleteMany({ where: { planId: id } });
       await this.generateSchedule(id, merged as any);
     }
@@ -193,6 +208,9 @@ export class PlansService {
     let totalAmount = 0;
 
     switch (dto.type) {
+      case 'SAVINGS':
+        totalAmount = 0;
+        break;
       case 'PROGRESSIVE':
         totalAmount = calculateProgressiveTotal(
           startAmount,
@@ -219,6 +237,10 @@ export class PlansService {
     }
 
     const fixedFees = registrationFee + caNeetFee;
+
+    if (dto.type === 'SAVINGS') {
+      return { totalAmount: 0, finalAmount: 0 };
+    }
 
     const finalAmount =
       interestBearingSabotay
@@ -247,7 +269,11 @@ export class PlansService {
     const registrationFee = dto.registrationFee == null ? 0 : toNumber(dto.registrationFee);
     const caNeetFee = dto.caNeetFee == null ? 0 : toNumber(dto.caNeetFee);
     const interestBearingSabotay = dto.type === 'SABOTAY' && interestRate > 0;
-    const items = [];
+    const items: Array<{ dayNumber: number; amount: number; label: string }> = [];
+
+    if (dto.type === 'SAVINGS') {
+      return items;
+    }
 
     if (dto.type === 'PROGRESSIVE') {
       for (let day = 1; day <= durationDays; day++) {
@@ -309,9 +335,43 @@ export class PlansService {
 
   private async generateSchedule(planId: string, dto: CreatePlanDtoType) {
     const items = this.buildScheduleItems(dto);
+    if (items.length === 0) return;
     await prisma.planSchedule.createMany({
       data: items.map((item) => ({ ...item, planId })),
     });
+  }
+
+  private validatePlanConfiguration(dto: CreatePlanDtoType) {
+    if (dto.type === 'SAVINGS') return;
+
+    if (!dto.durationDays || dto.durationDays < 1) {
+      throw ApiError.badRequest('La duree est requise pour ce type de plan');
+    }
+
+    if (!dto.startAmount || toNumber(dto.startAmount) <= 0) {
+      throw ApiError.badRequest('Le montant de base est requis pour ce type de plan');
+    }
+
+    if (dto.type === 'PROGRESSIVE' && !dto.incrementAmount) {
+      throw ApiError.badRequest('Le montant d\'increment est requis pour un plan progressif');
+    }
+
+    if (['FIXED_DAILY', 'WEEKLY', 'MONTHLY'].includes(dto.type) && !dto.fixedAmount) {
+      throw ApiError.badRequest('Le montant fixe est requis pour ce type de plan');
+    }
+  }
+
+  private normalizePlanPayload(dto: CreatePlanDtoType): CreatePlanDtoType {
+    if (dto.type !== 'SAVINGS') return dto;
+
+    return {
+      ...dto,
+      durationDays: 0,
+      startAmount: 0,
+      incrementAmount: undefined,
+      fixedAmount: undefined,
+      interestRate: undefined,
+    };
   }
 }
 

@@ -78,7 +78,8 @@ export class SubscriptionsService {
     const endDate = addDays(startDate, plan.durationDays);
     const subscriptionNumber = generateReference('SUB');
     const dossierNumber = generateReference('DOS');
-    const totalDue = toNumber(plan.totalAmount);
+    const isSavings = plan.type === 'SAVINGS';
+    const totalDue = isSavings ? 0 : toNumber(plan.totalAmount);
     const beneficiaryName = dto.beneficiaryName?.trim() || `${user.firstName} ${user.lastName}`;
     const beneficiaryPhone = dto.beneficiaryPhone?.trim() || user.phone || null;
     const beneficiarySignature = dto.beneficiarySignature?.trim() || null;
@@ -94,26 +95,31 @@ export class SubscriptionsService {
         beneficiaryPhone,
         beneficiarySignature,
         startDate,
-        endDate,
-        nextPaymentDate: startDate,
+        endDate: isSavings ? startDate : endDate,
+        nextPaymentDate: isSavings ? null : startDate,
         totalDue,
         remainingAmount: totalDue,
-        totalDays: plan.durationDays,
+        currentDay: 0,
+        totalDays: isSavings ? 0 : plan.durationDays,
         withdrawalAllowedAt:
-          plan.withdrawalDelayDays > 0
+          isSavings
+            ? null
+            : plan.withdrawalDelayDays > 0
             ? addDays(endDate, plan.withdrawalDelayDays)
             : endDate,
       },
       include: {
         plan: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            finalAmount: true,
-            registrationFee: true,
-            caNeetFee: true,
+          include: {
+            planSchedules: {
+              select: { dayNumber: true, amount: true, label: true },
+              orderBy: { dayNumber: 'asc' },
+            },
           },
+        },
+        payments: {
+          where: { status: 'SUCCESS' },
+          select: { amount: true, paidAt: true, dayNumber: true, status: true },
         },
       },
     });
@@ -130,7 +136,7 @@ export class SubscriptionsService {
       },
     });
 
-    return subscription;
+    return this.withNextPaymentInfo(subscription);
   }
 
   async listMySubscriptions(userId: string, params: any) {
@@ -144,20 +150,16 @@ export class SubscriptionsService {
         orderBy: { createdAt: 'desc' },
         include: {
           plan: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              imageUrl: true,
-              finalAmount: true,
-              registrationFee: true,
-              caNeetFee: true,
+            include: {
+              planSchedules: {
+                select: { dayNumber: true, amount: true, label: true },
+                orderBy: { dayNumber: 'asc' },
+              },
             },
           },
           payments: {
             where: { status: 'SUCCESS' },
-            select: { amount: true, paidAt: true },
-            take: 5,
+            select: { amount: true, paidAt: true, dayNumber: true, status: true },
             orderBy: { createdAt: 'desc' },
           },
           _count: { select: { payments: true, penalties: true } },
@@ -166,7 +168,12 @@ export class SubscriptionsService {
       prisma.subscription.count({ where: { userId } }),
     ]);
 
-    return buildPaginatedResult(data, total, page, limit);
+    return buildPaginatedResult(
+      data.map((sub) => this.withNextPaymentInfo(sub)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async getSubscriptionDetail(id: string, userId: string, role?: string) {
@@ -199,7 +206,7 @@ export class SubscriptionsService {
     // Build progress with payment status per day
     const progress = this.buildProgress(sub);
 
-    return { ...sub, progress };
+    return { ...this.withNextPaymentInfo(sub), progress };
   }
 
   async cancelSubscription(id: string, userId: string) {
@@ -254,13 +261,17 @@ export class SubscriptionsService {
         orderBy: { createdAt: 'desc' },
         include: {
           plan: {
-            select: {
-              name: true,
-              type: true,
-              finalAmount: true,
-              registrationFee: true,
-              caNeetFee: true,
+            include: {
+              planSchedules: {
+                select: { dayNumber: true, amount: true, label: true },
+                orderBy: { dayNumber: 'asc' },
+              },
             },
+          },
+          payments: {
+            where: { status: 'SUCCESS' },
+            select: { amount: true, paidAt: true, dayNumber: true, status: true },
+            orderBy: { createdAt: 'desc' },
           },
           user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
         },
@@ -268,13 +279,24 @@ export class SubscriptionsService {
       prisma.subscription.count({ where }),
     ]);
 
-    return buildPaginatedResult(data, total, page, limit);
+    return buildPaginatedResult(
+      data.map((sub) => this.withNextPaymentInfo(sub)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async markAsTouched(id: string, actorId: string, actorRole: string, dto: MarkTouchDtoType) {
-    const existing = await prisma.subscription.findUnique({ where: { id } });
+    const existing = await prisma.subscription.findUnique({
+      where: { id },
+      include: { plan: { select: { type: true } } },
+    });
 
     if (!existing) throw ApiError.notFound('Carnet introuvable');
+    if (existing.plan.type === 'SAVINGS') {
+      throw ApiError.conflict('Une epargne libre ne se marque pas comme touchee');
+    }
     if (actorRole === 'AGENT') {
       const agent = await this.getAgentByUserId(actorId);
       if (existing.agentId !== agent.id) {
@@ -342,7 +364,42 @@ export class SubscriptionsService {
     return agent;
   }
 
+  private withNextPaymentInfo(sub: any) {
+    if (sub.plan?.type === 'SAVINGS') {
+      return {
+        ...sub,
+        currentDay: 0,
+        nextPaymentAmount: null,
+        nextPaymentDayNumber: null,
+      };
+    }
+
+    const paidDayNumbers = new Set<number>(
+      (sub.payments ?? [])
+        .filter((payment: any) => payment.status === 'SUCCESS' && payment.dayNumber != null)
+        .map((payment: any) => Number(payment.dayNumber)),
+    );
+    const nextSchedule = [...(sub.plan?.planSchedules ?? [])]
+      .sort((a: any, b: any) => a.dayNumber - b.dayNumber)
+      .find((schedule: any) => !paidDayNumbers.has(schedule.dayNumber));
+    const currentDay = Math.min(
+      sub.totalDays ?? 0,
+      Math.max(...Array.from(paidDayNumbers), 0),
+    );
+
+    return {
+      ...sub,
+      currentDay,
+      nextPaymentAmount: nextSchedule ? toNumber(nextSchedule.amount) : null,
+      nextPaymentDayNumber: nextSchedule?.dayNumber ?? null,
+    };
+  }
+
   private buildProgress(sub: any) {
+    if (sub.plan?.type === 'SAVINGS') {
+      return [];
+    }
+
     const schedule = sub.plan.planSchedules as any[];
     const payments = sub.payments as any[];
     const totalDays: number = sub.totalDays ?? schedule.length;

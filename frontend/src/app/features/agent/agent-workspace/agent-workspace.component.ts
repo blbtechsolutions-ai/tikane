@@ -139,13 +139,18 @@ interface AgentCollectionForm {
                   <option *ngFor="let carnet of collectableCarnets()" [value]="carnet.id">{{ carnetLabel(carnet) }}</option>
                 </select>
                 <p *ngIf="selectedCollectCarnet()" class="mt-2 text-xs" style="color: var(--text-muted)">
-                  Reste: {{ selectedCollectCarnet()?.remainingAmount | number }} HTG · Jour courant: {{ selectedCollectCarnet()?.currentDay }}
+                  <ng-container *ngIf="!isSavings(selectedCollectCarnet())">
+                    Reste: {{ selectedCollectCarnet()?.remainingAmount | number }} HTG · Prochain: jour {{ selectedCollectCarnet()?.nextPaymentDayNumber }}
+                  </ng-container>
+                  <ng-container *ngIf="isSavings(selectedCollectCarnet())">
+                    Solde epargne: {{ selectedCollectCarnet()?.totalPaid | number }} HTG
+                  </ng-container>
                 </p>
               </div>
 
               <div>
                 <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">Montant encaissé</label>
-                <input [(ngModel)]="collectionForm.amount" name="amount" type="number"
+                <input [(ngModel)]="collectionForm.amount" name="amount" type="number" [readonly]="selectedCollectCarnet() && !isSavings(selectedCollectCarnet())"
                   class="w-full px-3 py-2.5 rounded-xl text-sm outline-none focus:ring-2"
                   style="background: var(--surface-bg); border: 1px solid var(--surface-border); color: var(--text-primary)" />
               </div>
@@ -162,7 +167,7 @@ interface AgentCollectionForm {
                 </select>
               </div>
 
-              <div>
+              <div *ngIf="!isSavings(selectedCollectCarnet())">
                 <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary)">Jour</label>
                 <input [(ngModel)]="collectionForm.dayNumber" name="dayNumber" type="number"
                   class="w-full px-3 py-2.5 rounded-xl text-sm outline-none focus:ring-2"
@@ -229,13 +234,15 @@ interface AgentCollectionForm {
                     </p>
                   </div>
                   <div class="text-right min-w-32">
-                    <p class="text-sm font-bold text-emerald-500">{{ carnet.totalPaid | number }} / {{ carnet.totalDue | number }} HTG</p>
-                    <p class="text-xs" style="color: var(--text-muted)">Jour {{ carnet.currentDay }} / {{ carnet.totalDays }}</p>
+                    <p class="text-sm font-bold text-emerald-500" *ngIf="!isSavings(carnet)">{{ carnet.totalPaid | number }} / {{ carnet.totalDue | number }} HTG</p>
+                    <p class="text-sm font-bold text-emerald-500" *ngIf="isSavings(carnet)">{{ carnet.totalPaid | number }} HTG</p>
+                    <p class="text-xs" style="color: var(--text-muted)" *ngIf="!isSavings(carnet)">Jour {{ carnet.currentDay }} / {{ carnet.totalDays }}</p>
+                    <p class="text-xs" style="color: var(--text-muted)" *ngIf="isSavings(carnet)">Epargne libre</p>
                   </div>
                 </div>
 
                 <div class="flex flex-wrap gap-3 text-xs mb-3" style="color: var(--text-muted)">
-                  <span *ngIf="carnet.plan?.finalAmount">Montant à toucher: {{ carnet.plan?.finalAmount | number }} HTG</span>
+                  <span *ngIf="carnet.plan?.finalAmount && !isSavings(carnet)">Montant à toucher: {{ carnet.plan?.finalAmount | number }} HTG</span>
                   <span *ngIf="carnet.touchReference">Réf. touche: {{ carnet.touchReference }}</span>
                   <span *ngIf="carnet.withdrawalAllowedAt">Disponible: {{ carnet.withdrawalAllowedAt | date:'dd/MM/yyyy' }}</span>
                 </div>
@@ -359,10 +366,8 @@ export class AgentWorkspaceComponent implements OnInit {
   onCollectionCarnetChange(): void {
     const carnet = this.selectedCollectCarnet();
     if (!carnet) return;
-    this.collectionForm.dayNumber = carnet.currentDay;
-    if (!this.collectionForm.amount) {
-      this.collectionForm.amount = Number(carnet.remainingAmount) > 0 ? Number(carnet.remainingAmount) : null;
-    }
+    this.collectionForm.dayNumber = this.isSavings(carnet) ? null : carnet.nextPaymentDayNumber ?? null;
+    this.collectionForm.amount = this.isSavings(carnet) ? null : Number(carnet.nextPaymentAmount ?? 0) || null;
   }
 
   createCarnet(): void {
@@ -441,11 +446,18 @@ export class AgentWorkspaceComponent implements OnInit {
   }
 
   collectableCarnets(): Subscription[] {
-    return this.carnets.filter((carnet) => carnet.status === 'ACTIVE' && Number(carnet.remainingAmount) > 0);
+    return this.carnets.filter((carnet) =>
+      carnet.status === 'ACTIVE' &&
+      (this.isSavings(carnet) || Number(carnet.remainingAmount) > 0),
+    );
   }
 
   selectedCollectCarnet(): Subscription | undefined {
     return this.carnets.find((item) => item.id === this.collectionForm.subscriptionId);
+  }
+
+  isSavings(carnet?: Subscription): boolean {
+    return carnet?.plan?.type === 'SAVINGS';
   }
 
   carnetLabel(carnet: Subscription): string {

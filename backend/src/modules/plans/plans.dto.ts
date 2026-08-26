@@ -1,14 +1,16 @@
 import { z } from 'zod';
 
+const PlanTypeDto = z.enum(['PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY', 'SABOTAY', 'SAVINGS']);
+
 export const CreatePlanDto = z.object({
   name: z.string().min(3).max(100).trim(),
   nameCreole: z.string().max(100).optional(),
   description: z.string().max(1000).optional(),
   descriptionCreole: z.string().max(1000).optional(),
-  type: z.enum(['PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY', 'SABOTAY']),
+  type: PlanTypeDto,
   currency: z.string().default('HTG'),
-  durationDays: z.number().int().min(1).max(365),
-  startAmount: z.number().positive(),
+  durationDays: z.number().int().min(0).max(365).default(0),
+  startAmount: z.number().min(0).default(0),
   incrementAmount: z.number().positive().optional(),  // Pour PROGRESSIVE
   fixedAmount: z.number().positive().optional(),      // Pour FIXED, WEEKLY, MONTHLY
   interestRate: z.number().min(0).max(100).optional(), // Pour SABOTAY
@@ -33,7 +35,7 @@ export const UpdatePlanDto = CreatePlanDto.partial();
 export const ListPlansDto = z.object({
   page: z.string().optional().transform(v => (v !== undefined ? parseInt(v, 10) : undefined)),
   limit: z.string().optional().transform(v => (v !== undefined ? parseInt(v, 10) : undefined)),
-  type: z.enum(['PROGRESSIVE', 'FIXED_DAILY', 'WEEKLY', 'MONTHLY', 'SABOTAY']).optional(),
+  type: PlanTypeDto.optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']).optional(),
   isPublic: z.string().optional().transform((v) => v === 'true'),
   isFeatured: z.string().optional().transform((v) => v === 'true'),

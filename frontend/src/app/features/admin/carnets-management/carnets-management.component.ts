@@ -197,15 +197,17 @@ interface CarnetFormModel {
 
             <div class="text-right shrink-0">
               <p class="text-base font-bold text-purple-600">{{ carnet.totalPaid | number }} HTG</p>
-              <p class="text-xs" style="color: var(--text-muted)">/ {{ carnet.totalDue | number }} HTG total</p>
-              <p class="text-xs font-medium text-emerald-500">
+              <p class="text-xs" style="color: var(--text-muted)" *ngIf="!isSavings(carnet)">/ {{ carnet.totalDue | number }} HTG total</p>
+              <p class="text-xs" style="color: var(--text-muted)" *ngIf="isSavings(carnet)">Solde epargne</p>
+              <p class="text-xs font-medium text-emerald-500" *ngIf="!isSavings(carnet)">
                 Touche: {{ carnet.plan?.finalAmount | number }} HTG
               </p>
+              <p class="text-xs font-medium text-emerald-500" *ngIf="isSavings(carnet)">Epargne libre</p>
             </div>
           </div>
 
           <!-- Barre de progression -->
-          <div class="px-4 py-2" style="background: var(--surface-bg)">
+          <div class="px-4 py-2" style="background: var(--surface-bg)" *ngIf="!isSavings(carnet)">
             <div class="flex items-center justify-between text-xs mb-1.5" style="color: var(--text-muted)">
               <span>{{ carnet.currentDay }} / {{ carnet.totalDays }} jours versés</span>
               <span class="font-semibold">{{ progressPct(carnet) }}%</span>
@@ -241,7 +243,7 @@ interface CarnetFormModel {
               <mat-icon class="mr-1 text-base">{{ paymentFormId === carnet.id ? 'close' : 'add_card' }}</mat-icon>
               {{ paymentFormId === carnet.id ? 'Annuler' : 'Versement cash' }}
             </button>
-            <button mat-stroked-button type="button" (click)="toggleCalendar(carnet.id)"
+            <button *ngIf="!isSavings(carnet)" mat-stroked-button type="button" (click)="toggleCalendar(carnet.id)"
               class="!rounded-xl !text-xs">
               <mat-icon class="mr-1 text-base">
                 {{ calendarLoading === carnet.id ? 'hourglass_top' : (calendarCarnetId === carnet.id ? 'calendar_view_month' : 'calendar_today') }}
@@ -259,18 +261,18 @@ interface CarnetFormModel {
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
+              <div *ngIf="!isSavings(carnet)">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary)">
-                  Jour n° <span class="opacity-60">(suivant: {{ (carnet.currentDay ?? 0) + 1 }})</span>
+                  Jour n° <span class="opacity-60">(suivant: {{ carnet.nextPaymentDayNumber }})</span>
                 </label>
-                <input [(ngModel)]="paymentForm.dayNumber" name="dayNumber" type="number" min="1"
+                <input [(ngModel)]="paymentForm.dayNumber" name="dayNumber" type="number" min="1" readonly
                   [max]="carnet.totalDays"
                   class="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                   style="background: var(--surface-bg); border: 1px solid var(--surface-border); color: var(--text-primary)" />
               </div>
               <div>
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary)">Montant (HTG) *</label>
-                <input [(ngModel)]="paymentForm.amount" name="amount" type="number" min="1"
+                <input [(ngModel)]="paymentForm.amount" name="amount" type="number" min="1" [readonly]="!isSavings(carnet)"
                   placeholder="Ex: 100"
                   class="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                   style="background: var(--surface-bg); border: 1px solid var(--surface-border); color: var(--text-primary)" />
@@ -307,6 +309,7 @@ interface CarnetFormModel {
               </span>
             </div>
             <app-carnet-calendar
+              *ngIf="!isSavings(carnet)"
               [progress]="calendarData.get(carnet.id)?.progress ?? []"
               [startDate]="calendarData.get(carnet.id)?.startDate">
             </app-carnet-calendar>
@@ -358,7 +361,7 @@ export class CarnetsManagementComponent implements OnInit {
 
   // Versement cash
   paymentFormId: string | null = null;
-  paymentForm = { dayNumber: 1, amount: null as any, notes: '' };
+  paymentForm: { dayNumber: number | null; amount: number | null; notes: string } = { dayNumber: 1, amount: null, notes: '' };
   recordingPayment = false;
 
   // Calendrier
@@ -438,6 +441,7 @@ export class CarnetsManagementComponent implements OnInit {
   }
 
   progressPct(carnet: Subscription): number {
+    if (this.isSavings(carnet)) return 0;
     if (!carnet.totalDays || carnet.totalDays === 0) return 0;
     return Math.round(((carnet.currentDay ?? 0) / carnet.totalDays) * 100);
   }
@@ -502,8 +506,11 @@ export class CarnetsManagementComponent implements OnInit {
       this.paymentFormId = null;
     } else {
       const carnet = this.carnets.find((c) => c.id === carnetId);
-      const nextDay = (carnet?.currentDay ?? 0) + 1;
-      this.paymentForm = { dayNumber: nextDay, amount: null as any, notes: '' };
+      this.paymentForm = {
+        dayNumber: this.isSavings(carnet) ? null : carnet?.nextPaymentDayNumber ?? 1,
+        amount: this.isSavings(carnet) ? null : carnet?.nextPaymentAmount ?? null,
+        notes: '',
+      };
       this.paymentFormId = carnetId;
     }
   }
@@ -516,12 +523,12 @@ export class CarnetsManagementComponent implements OnInit {
     this.recordingPayment = true;
     this.adminService.adminCollectPayment({
       subscriptionId: carnet.id,
-      amount: this.paymentForm.amount,
-      dayNumber: this.paymentForm.dayNumber || undefined,
+      amount: Number(this.paymentForm.amount),
+      dayNumber: this.isSavings(carnet) ? undefined : this.paymentForm.dayNumber || undefined,
       notes: this.paymentForm.notes || undefined,
     }).subscribe({
       next: () => {
-        this.toastr.success(`Versement jour ${this.paymentForm.dayNumber} enregistré`);
+        this.toastr.success(this.isSavings(carnet) ? 'Depot epargne enregistre' : `Versement jour ${this.paymentForm.dayNumber} enregistré`);
         this.paymentFormId = null;
         this.recordingPayment = false;
         this.loadCarnets();
@@ -583,6 +590,10 @@ export class CarnetsManagementComponent implements OnInit {
   getPlanTypeLabel(carnet: Subscription): string {
     const planType = carnet.plan?.type as keyof typeof PLAN_TYPE_LABELS | undefined;
     return planType ? this.planTypeLabels[planType] : 'Carnet';
+  }
+
+  isSavings(carnet?: Subscription): boolean {
+    return carnet?.plan?.type === 'SAVINGS';
   }
 
   private createEmptyForm(): CarnetFormModel {
